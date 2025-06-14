@@ -174,6 +174,7 @@ const (
 	ActionLog    ActionType = "log"
 	ActionAlert  ActionType = "alert"
 )
+<<<<<<< HEAD
 
 // PolicyDecision represents the engine decision for a request.
 type PolicyDecision struct {
@@ -204,3 +205,5 @@ type NotificationConfig struct {
 	Target  string
 	Message string
 }
+=======
+>>>>>>> main
