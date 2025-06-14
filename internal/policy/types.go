@@ -10,7 +10,11 @@ import (
 	"guardagent/internal/common"
 )
 
-// Request represents an incoming request to be evaluated.
+/* ------------------------------------------------------------------ */
+/* -------------------------  TIPOS BÁSICOS  ------------------------ */
+/* ------------------------------------------------------------------ */
+
+// Request representa a chamada que será avaliada pelo motor de políticas.
 type Request struct {
 	ID          string
 	TenantID    string
@@ -19,25 +23,29 @@ type Request struct {
 	Headers     map[string]string
 }
 
-// ThreatAnalysis aggregates detection results.
+// ThreatAnalysis agrega os resultados dos detectores.
 type ThreatAnalysis struct {
 	Results []DetectionResult
 	MaxRisk float64
 }
 
-// DetectionResult is a simplified detection outcome.
+// DetectionResult é o resumo de uma detecção feita pelo pipeline.
 type DetectionResult struct {
 	ThreatType common.ThreatType
 	Confidence float64
 }
 
-// PolicyConfig contains engine configuration.
+/* ------------------------------------------------------------------ */
+/* ------------------  CONFIG, CACHE E MÉTRICAS  -------------------- */
+/* ------------------------------------------------------------------ */
+
+// PolicyConfig define parâmetros de inicialização do motor.
 type PolicyConfig struct {
 	GitRepo         string
 	RefreshInterval time.Duration
 }
 
-// PolicyCache provides an LRU cache for policy decisions.
+// PolicyCache implementa cache LRU com TTL para decisões de política.
 type PolicyCache struct {
 	maxSize int
 	ttl     time.Duration
@@ -91,8 +99,7 @@ func (c *PolicyCache) Set(key string, val interface{}) {
 	item.element = c.lru.PushFront(item)
 	c.items[key] = item
 	if len(c.items) > c.maxSize {
-		oldest := c.lru.Back()
-		if oldest != nil {
+		if oldest := c.lru.Back(); oldest != nil {
 			c.remove(oldest.Value.(*cacheItem))
 		}
 	}
@@ -117,7 +124,7 @@ func (c *PolicyCache) cleanup() {
 	}
 }
 
-// PolicyMetrics holds Prometheus metrics for policy evaluation.
+// PolicyMetrics expõe métricas Prometheus do motor de políticas.
 type PolicyMetrics struct {
 	CacheHits          prometheus.Counter
 	CacheMisses        prometheus.Counter
@@ -144,27 +151,35 @@ func NewPolicyMetrics() *PolicyMetrics {
 	}
 }
 
-// GitPolicyRepo is a stub for a git-backed policy store.
+/* ------------------------------------------------------------------ */
+/* ------------------  REPOSITÓRIO DE POLÍTICAS  -------------------- */
+/* ------------------------------------------------------------------ */
+
+// GitPolicyRepo é um stub para armazenar políticas em Git.
 type GitPolicyRepo struct {
 	Path string
 }
 
-func NewGitPolicyRepo(path string) *GitPolicyRepo {
-	return &GitPolicyRepo{Path: path}
-}
+func NewGitPolicyRepo(path string) *GitPolicyRepo { return &GitPolicyRepo{Path: path} }
+func (g *GitPolicyRepo) Pull() error              { return nil }
 
-func (g *GitPolicyRepo) Pull() error { return nil }
+/* ------------------------------------------------------------------ */
+/* ---------------------  AVALIADOR / REGO  ------------------------- */
+/* ------------------------------------------------------------------ */
 
-// PolicyEvaluator wraps policy evaluation logic.
+// PolicyEvaluator orquestra a avaliação de políticas.
 type PolicyEvaluator struct{}
 
-func NewPolicyEvaluator() *PolicyEvaluator { return &PolicyEvaluator{} }
-
-func (e *PolicyEvaluator) Evaluate(ctx context.Context, query string, input interface{}) (interface{}, error) {
-	return nil, nil
+func NewPolicyEvaluator() *PolicyEvaluator                               { return &PolicyEvaluator{} }
+func (e *PolicyEvaluator) Evaluate(ctx context.Context, q string, in any) (any, error) {
+	return nil, nil // implementação simplificada
 }
 
-// ActionType enumerates possible policy actions.
+/* ------------------------------------------------------------------ */
+/* -------------------------  AÇÕES E DTOs  ------------------------- */
+/* ------------------------------------------------------------------ */
+
+// ActionType lista ações possíveis após decisão de política.
 type ActionType string
 
 const (
@@ -174,3 +189,37 @@ const (
 	ActionLog    ActionType = "log"
 	ActionAlert  ActionType = "alert"
 )
+
+// PolicyDecision descreve o resultado final para um request.
+type PolicyDecision struct {
+	RequestID string
+	TenantID  string
+	Timestamp time.Time
+	Analysis  *ThreatAnalysis
+	Action    Action
+}
+
+// Action define como o gateway deve reagir.
+type Action struct {
+	Type         ActionType
+	Parameters   map[string]string
+	Fallback     *Action
+	Webhook      *WebhookConfig
+	Notification *NotificationConfig
+}
+
+// WebhookConfig para acionamento externo.
+type WebhookConfig struct {
+	URL     string
+	Method  string
+	Headers map[string]string
+	Timeout time.Duration
+}
+
+// NotificationConfig para canais (Slack, e-mail etc.).
+type NotificationConfig struct {
+	Channel string
+	Target  string
+	Message string
+}
+
