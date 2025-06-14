@@ -1,0 +1,16 @@
+project_name: guardagent
+builds:
+  - main: ./cmd/guardagent
+    flags: -trimpath
+    ldflags: -s -w
+    goos: [linux]
+    goarch: [amd64]
+
+dockers:
+  - image_templates:
+      - 'ghcr.io/studiodeia/guardagent:{{ .Tag }}'
+    dockerfile: Dockerfile
+release:
+  github:
+    owner: studiodeia
+    name: guardagent

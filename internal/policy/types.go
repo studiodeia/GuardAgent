@@ -174,3 +174,33 @@ const (
 	ActionLog    ActionType = "log"
 	ActionAlert  ActionType = "alert"
 )
+
+// PolicyDecision represents the engine decision for a request.
+type PolicyDecision struct {
+	RequestID string
+	TenantID  string
+	Timestamp time.Time
+	Analysis  *ThreatAnalysis
+	Action    Action
+}
+
+type Action struct {
+	Type         ActionType
+	Parameters   map[string]string
+	Fallback     *Action
+	Webhook      *WebhookConfig
+	Notification *NotificationConfig
+}
+
+type WebhookConfig struct {
+	URL     string
+	Method  string
+	Headers map[string]string
+	Timeout time.Duration
+}
+
+type NotificationConfig struct {
+	Channel string
+	Target  string
+	Message string
+}

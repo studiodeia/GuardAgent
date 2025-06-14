@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guardagent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: guardagent
+  template:
+    metadata:
+      labels:
+        app: guardagent
+    spec:
+      containers:
+      - name: guardagent
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        ports:
+        - containerPort: {{ .Values.service.port }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}

@@ -1,0 +1,18 @@
+syntax = "proto3";
+package guardagent.api;
+
+option go_package = "github.com/studiodeia/guardagent/api";
+
+message FilterRequest {
+  string tenant_id = 1;
+  string text = 2;
+}
+
+message FilterResponse {
+  bool allowed = 1;
+  string action = 2;
+}
+
+service FilterService {
+  rpc Filter(FilterRequest) returns (FilterResponse);
+}
