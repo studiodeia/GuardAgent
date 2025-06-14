@@ -1,0 +1,15 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ga-feed-loader
+spec:
+  schedule: "*/30 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: loader
+            image: ghcr.io/studiodeia/guardagent:latest
+            args: ["feed-loader", "--once"]
+          restartPolicy: OnFailure

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardagent
+spec:
+  selector:
+    app: guardagent
+  ports:
+  - port: {{ .Values.service.port }}
+    targetPort: {{ .Values.service.port }}

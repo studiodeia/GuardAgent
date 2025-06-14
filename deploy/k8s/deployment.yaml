@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guardagent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: guardagent
+  template:
+    metadata:
+      labels:
+        app: guardagent
+    spec:
+      containers:
+      - name: guardagent
+        image: ghcr.io/studiodeia/guardagent:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 9090
