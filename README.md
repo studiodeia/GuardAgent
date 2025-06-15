@@ -25,7 +25,7 @@ The gateway exposes `/v1/filter` for REST and the `Filter` gRPC service. Incomin
 
 ## Quick Start
 
-### Simple Local Development
+Metrics are available at `http://localhost:9090/metrics` and the health check endpoint responds on `/healthz`.
 
 For quick local development and testing:
 
