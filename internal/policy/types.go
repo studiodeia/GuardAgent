@@ -12,6 +12,8 @@ type Engine interface {
 	GetMetrics() *EngineMetrics
 }
 
+	Rules           []string
+	Timeout         time.Duration
 // Request represents an incoming request to be evaluated by the policy engine.
 type Request struct {
 	ID        string
