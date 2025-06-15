@@ -33,6 +33,11 @@ func New(det *detection.PatternDetector, pol *policy.SimpleEngine, cfg *Config) 
 
 func (s *Server) routes() {
 	s.router.HandleFunc("/v1/filter", s.handleFilter).Methods(http.MethodPost)
+	s.router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}).Methods(http.MethodGet)
+	s.router.Handle("/metrics", promhttp.Handler()).Methods(http.MethodGet)
 }
 
 func (s *Server) Router() http.Handler { return s.router }
