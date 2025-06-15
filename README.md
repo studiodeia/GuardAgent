@@ -25,7 +25,19 @@ The gateway exposes `/v1/filter` for REST and the `Filter` gRPC service. Incomin
 
 ## Quick Start
 
-1. **Run Postgres and Redis**, then start the gateway:
+### Simple Local Development
+
+For quick local development and testing:
+
+```bash
+go run ./cmd/guardagent
+```
+
+Metrics are available on `:9090/metrics`.
+
+### Full Production Setup
+
+1. **Run Postgres and Redis**, then start the gateway with full configuration:
 
 ```bash
 export GA_DB_DSN="postgres://postgres:postgres@localhost:5432/guardagent?sslmode=disable"
@@ -48,8 +60,6 @@ curl -X POST http://localhost:8080/v1/filter -d "text=CPF 123.456.789-00" -H "X-
 docker build -t guardagent:latest .
 docker run -p 8080:8080 -p 9090:9090 guardagent:latest
 ```
-
-Metrics are available at `http://localhost:9090/metrics`.
 
 ## Development
 

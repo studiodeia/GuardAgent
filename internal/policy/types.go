@@ -1,170 +1,180 @@
 package policy
 
 import (
-	"container/list"
 	"context"
-	"sync"
 	"time"
-
-	"github.com/prometheus/client_golang/prometheus"
-	"guardagent/internal/common"
 )
 
-// Request represents an incoming request to be evaluated.
+// Engine defines the interface for policy evaluation engines.
+type Engine interface {
+	Evaluate(ctx context.Context, req *Request) (*Decision, error)
+	LoadPolicies(ctx context.Context, policies []Policy) error
+	GetMetrics() *EngineMetrics
+}
+
+// Request represents an incoming request to be evaluated by the policy engine.
 type Request struct {
+	ID        string
+	TenantID  string
+	Timestamp time.Time
+	Content   string
+	Metadata  map[string]interface{}
+	Analysis  *ThreatAnalysis
+}
+
+// Policy represents a security policy with rules and actions.
+type Policy struct {
 	ID          string
+	Name        string
+	Description string
 	TenantID    string
-	Environment string
-	Payload     []byte
-	Headers     map[string]string
+	Version     string
+	Rules       []Rule
+	Enabled     bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
-// ThreatAnalysis aggregates detection results.
+// Rule defines conditions and actions for policy evaluation.
+type Rule struct {
+	ID          string
+	Name        string
+	Description string
+	Condition   string // Rego expression or similar
+	Actions     []Action
+	Priority    int
+	Enabled     bool
+}
+
+// ThreatAnalysis contains the results of threat detection analysis.
 type ThreatAnalysis struct {
-	Results []DetectionResult
-	MaxRisk float64
+	Score       float64
+	Confidence  float64
+	Threats     []DetectedThreat
+	PIIMatches  []PIIMatch
+	Indicators  []ThreatIndicator
 }
 
-// DetectionResult is a simplified detection outcome.
-type DetectionResult struct {
-	ThreatType common.ThreatType
-	Confidence float64
+// DetectedThreat represents a specific threat found in the content.
+type DetectedThreat struct {
+	Type        string
+	Severity    string
+	Description string
+	Location    Location
+	Confidence  float64
 }
 
-// PolicyConfig contains engine configuration.
-type PolicyConfig struct {
-	GitRepo         string
-	RefreshInterval time.Duration
+// PIIMatch represents detected personally identifiable information.
+type PIIMatch struct {
+	Type        string // CPF, CNPJ, Email, etc.
+	Value       string
+	Location    Location
+	Confidence  float64
+	Redacted    bool
 }
 
-// PolicyCache provides an LRU cache for policy decisions.
-type PolicyCache struct {
-	maxSize int
-	ttl     time.Duration
-	items   map[string]*cacheItem
-	lru     *list.List
-	mu      sync.Mutex
+// ThreatIndicator represents a threat intelligence indicator match.
+type ThreatIndicator struct {
+	Type        string // IP, Domain, Hash, etc.
+	Value       string
+	Source      string
+	Severity    string
+	Description string
+	LastSeen    time.Time
 }
 
-type cacheItem struct {
-	key       string
-	value     interface{}
-	expiresAt time.Time
-	element   *list.Element
+// Location represents the position of a match in the content.
+type Location struct {
+	Start int
+	End   int
+	Line  int
+	Column int
 }
 
-func NewPolicyCache(size int, ttl time.Duration) *PolicyCache {
-	c := &PolicyCache{
-		maxSize: size,
-		ttl:     ttl,
-		items:   make(map[string]*cacheItem),
-		lru:     list.New(),
-	}
-	go c.cleanup()
-	return c
+// Decision represents the policy engine's evaluation result.
+type Decision struct {
+	RequestID   string
+	TenantID    string
+	Timestamp   time.Time
+	Action      Action
+	Reasons     []string
+	Score       float64
+	Analysis    *ThreatAnalysis
+	RulesApplied []string
 }
 
-func (c *PolicyCache) Get(key string) (interface{}, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if item, ok := c.items[key]; ok {
-		if time.Now().After(item.expiresAt) {
-			c.remove(item)
-			return nil, false
-		}
-		c.lru.MoveToFront(item.element)
-		return item.value, true
-	}
-	return nil, false
+// EngineMetrics contains operational metrics for the policy engine.
+type EngineMetrics struct {
+	RequestsProcessed   int64
+	RequestsBlocked     int64
+	RequestsAllowed     int64
+	RequestsRedacted    int64
+	AverageLatency      time.Duration
+	PolicyViolations    int64
+	ThreatDetections    int64
 }
 
-func (c *PolicyCache) Set(key string, val interface{}) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if item, ok := c.items[key]; ok {
-		item.value = val
-		item.expiresAt = time.Now().Add(c.ttl)
-		c.lru.MoveToFront(item.element)
-		return
-	}
-	item := &cacheItem{key: key, value: val, expiresAt: time.Now().Add(c.ttl)}
-	item.element = c.lru.PushFront(item)
-	c.items[key] = item
-	if len(c.items) > c.maxSize {
-		oldest := c.lru.Back()
-		if oldest != nil {
-			c.remove(oldest.Value.(*cacheItem))
-		}
-	}
+// RegoEngine implements the Engine interface using Open Policy Agent's Rego.
+type RegoEngine struct {
+	policies map[string]*Policy
+	metrics  *EngineMetrics
 }
 
-func (c *PolicyCache) remove(item *cacheItem) {
-	delete(c.items, item.key)
-	c.lru.Remove(item.element)
-}
-
-func (c *PolicyCache) cleanup() {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-	for range ticker.C {
-		c.mu.Lock()
-		for _, it := range c.items {
-			if time.Now().After(it.expiresAt) {
-				c.remove(it)
-			}
-		}
-		c.mu.Unlock()
+// NewRegoEngine creates a new Rego-based policy engine.
+func NewRegoEngine() *RegoEngine {
+	return &RegoEngine{
+		policies: make(map[string]*Policy),
+		metrics:  &EngineMetrics{},
 	}
 }
 
-// PolicyMetrics holds Prometheus metrics for policy evaluation.
-type PolicyMetrics struct {
-	CacheHits          prometheus.Counter
-	CacheMisses        prometheus.Counter
-	RulesMatched       *prometheus.CounterVec
-	EvaluationDuration prometheus.Histogram
-	EvaluationErrors   *prometheus.CounterVec
-	ActionErrors       *prometheus.CounterVec
-}
-
-func NewPolicyMetrics() *PolicyMetrics {
-	return &PolicyMetrics{
-		CacheHits:   prometheus.NewCounter(prometheus.CounterOpts{Name: "ga_policy_cache_hits_total", Help: "Policy cache hits"}),
-		CacheMisses: prometheus.NewCounter(prometheus.CounterOpts{Name: "ga_policy_cache_misses_total", Help: "Policy cache misses"}),
-		RulesMatched: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "ga_policy_rules_matched_total",
-			Help: "Number of matched policy rules"}, []string{"rule"}),
-		EvaluationDuration: prometheus.NewHistogram(prometheus.HistogramOpts{Name: "ga_policy_evaluation_seconds"}),
-		EvaluationErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "ga_policy_evaluation_errors_total",
-			Help: "Errors during policy evaluation"}, []string{"rule"}),
-		ActionErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "ga_policy_action_errors_total",
-			Help: "Errors executing policy actions"}, []string{"action"}),
+// Evaluate processes a request through the policy engine.
+func (e *RegoEngine) Evaluate(ctx context.Context, req *Request) (*Decision, error) {
+	// Simplified implementation - would contain full Rego evaluation logic
+	decision := &Decision{
+		RequestID: req.ID,
+		TenantID:  req.TenantID,
+		Timestamp: time.Now(),
+		Action:    Action{Type: ActionAllow},
+		Analysis:  req.Analysis,
 	}
+	
+	e.metrics.RequestsProcessed++
+	e.metrics.RequestsAllowed++
+	
+	return decision, nil
 }
 
-// GitPolicyRepo is a stub for a git-backed policy store.
-type GitPolicyRepo struct {
-	Path string
+// LoadPolicies loads policies into the engine.
+func (e *RegoEngine) LoadPolicies(ctx context.Context, policies []Policy) error {
+	for _, policy := range policies {
+		e.policies[policy.ID] = &policy
+	}
+	return nil
 }
 
-func NewGitPolicyRepo(path string) *GitPolicyRepo {
-	return &GitPolicyRepo{Path: path}
+// GetMetrics returns current engine metrics.
+func (e *RegoEngine) GetMetrics() *EngineMetrics {
+	return e.metrics
 }
 
-func (g *GitPolicyRepo) Pull() error { return nil }
-
-// PolicyEvaluator wraps policy evaluation logic.
-type PolicyEvaluator struct{}
-
-func NewPolicyEvaluator() *PolicyEvaluator { return &PolicyEvaluator{} }
-
-func (e *PolicyEvaluator) Evaluate(ctx context.Context, query string, input interface{}) (interface{}, error) {
-	return nil, nil
+// ValidatePolicy validates a policy configuration.
+func (e *RegoEngine) ValidatePolicy(policy *Policy) error {
+	// Simplified validation - would contain full policy validation logic
+	return nil
 }
 
-// ActionType enumerates possible policy actions.
+// CompileRules compiles policy rules for efficient evaluation.
+func (e *RegoEngine) CompileRules(rules []Rule) error {
+	// Simplified compilation - would contain full rule compilation logic
+	return nil
+}
+
+/* ------------------------------------------------------------------ */
+/* -------------------------  ACTIONS & DTOS  ---------------------- */
+/* ------------------------------------------------------------------ */
+
+// ActionType defines possible actions after policy decision.
 type ActionType string
 
 const (
@@ -184,6 +194,7 @@ type PolicyDecision struct {
 	Action    Action
 }
 
+// Action defines how the gateway should react.
 type Action struct {
 	Type         ActionType
 	Parameters   map[string]string
@@ -192,6 +203,7 @@ type Action struct {
 	Notification *NotificationConfig
 }
 
+// WebhookConfig for external webhook triggers.
 type WebhookConfig struct {
 	URL     string
 	Method  string
@@ -199,6 +211,7 @@ type WebhookConfig struct {
 	Timeout time.Duration
 }
 
+// NotificationConfig for notification channels (Slack, email, etc.).
 type NotificationConfig struct {
 	Channel string
 	Target  string
