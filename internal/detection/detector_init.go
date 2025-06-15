@@ -1,15 +1,10 @@
 package detection
 
 import (
-	"time"
-
 	"github.com/willf/bloom"
 )
 
-var (
-	bf    = bloom.New(100000, 5) // ~1% false positive
-	cache = NewPatternCache(1000, 5*time.Minute)
-)
+var bf = bloom.New(100000, 5) // ~1% false positive
 
 func init() {
 	patterns := []string{

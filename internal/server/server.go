@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -38,7 +39,11 @@ func (s *Server) Router() http.Handler { return s.router }
 
 func (s *Server) StartMetrics(addr string) {
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(addr, nil)
+	go func() {
+		if err := http.ListenAndServe(addr, nil); err != nil && err != http.ErrServerClosed {
+			slog.Error("metrics server error", "err", err)
+		}
+	}()
 }
 
 func (s *Server) handleFilter(w http.ResponseWriter, r *http.Request) {

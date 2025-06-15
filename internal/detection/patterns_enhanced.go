@@ -7,7 +7,6 @@ import (
 	"hash/fnv"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -21,7 +20,6 @@ type PatternDetector struct {
 	bloomFilter *BloomFilter
 	cache       *PatternCache
 	metrics     *DetectionMetrics
-	mu          sync.RWMutex
 }
 
 type CompiledPattern struct {
@@ -362,7 +360,7 @@ func (pd *PatternDetector) isOverlapping(match1, match2 PIIMatch) bool {
 		return false
 	}
 
-	return !(match1.Position[1] <= match2.Position[0] || match2.Position[1] <= match1.Position[0])
+	return match1.Position[1] > match2.Position[0] && match2.Position[1] > match1.Position[0]
 }
 
 func (pd *PatternDetector) inferPIIType(patternName string) PIIType {
